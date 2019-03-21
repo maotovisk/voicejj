@@ -1,0 +1,187 @@
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>VoiceJJ</title>
+    <script src="https://cdn.jsdelivr.net/npm/peerjs@0.3.20/dist/peer.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script src="//www.WebRTC-Experiment.com/RecordRTC.js"></script>
+    <link rel="stylesheet" type="text/css" href="/css/main.css">
+    <script src="/js/main.js"></script>
+</head>
+
+<body>
+    <audio style="visibility: hidden" controls></audio>
+  <center>
+  <div style="visibility: visible" id="pos-nick">
+    <p id="texto"></p>
+  <br />
+  <p>Nome de usuario do parceiro</p>
+  <input type="text" id="to">
+  <a class="btn-inicio" id="start-call">Chamar</a>
+</div>
+<p id="andamento"></p>
+<br />
+<a class="btn-inicio" id="end-call" style="visibility: hidden" href="login.html">Finalizar chamada</a>
+</center>
+</body>
+
+<script>
+
+$("input").val("");
+
+
+// script pra pegar parametros da url
+function getAllUrlParams(url) {
+
+// get query string from url (optional) or window
+var queryString = url ? url.split('?')[1] : window.location.search.slice(1);
+
+// we'll store the parameters here
+var obj = {};
+
+// if query string exists
+if (queryString) {
+
+  // stuff after # is not part of query string, so get rid of it
+  queryString = queryString.split('#')[0];
+
+  // split our query string into its component parts
+  var arr = queryString.split('&');
+
+  for (var i = 0; i < arr.length; i++) {
+    // separate the keys and the values
+    var a = arr[i].split('=');
+
+    // set parameter name and value (use 'true' if empty)
+    var paramName = a[0];
+    var paramValue = typeof (a[1]) === 'undefined' ? true : a[1];
+
+    // (optional) keep case consistent
+    paramName = paramName.toLowerCase();
+    if (typeof paramValue === 'string') paramValue = paramValue.toLowerCase();
+
+    // if the paramName ends with square brackets, e.g. colors[] or colors[2]
+    if (paramName.match(/\[(\d+)?\]$/)) {
+
+      // create key if it doesn't exist
+      var key = paramName.replace(/\[(\d+)?\]/, '');
+      if (!obj[key]) obj[key] = [];
+
+      // if it's an indexed array e.g. colors[2]
+      if (paramName.match(/\[\d+\]$/)) {
+        // get the index value and add the entry at the appropriate position
+        var index = /\[(\d+)\]/.exec(paramName)[1];
+        obj[key][index] = paramValue;
+      } else {
+        // otherwise add the value to the end of the array
+        obj[key].push(paramValue);
+      }
+    } else {
+      // we're dealing with a string
+      if (!obj[paramName]) {
+        // if it doesn't exist, create property
+        obj[paramName] = paramValue;
+      } else if (obj[paramName] && typeof obj[paramName] === 'string'){
+        // if property does exist and it's a string, convert it to an array
+        obj[paramName] = [obj[paramName]];
+        obj[paramName].push(paramValue);
+      } else {
+        // otherwise add the property
+        obj[paramName].push(paramValue);
+      }
+    }
+  }
+}
+
+return obj;
+}
+
+var from = getAllUrlParams().usuario;
+console.log('Meu nome é: ' + from);
+function getParameterByName(name){
+    name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+function getAudio(successCallback, errorCallback){
+    navigator.getUserMedia({
+        audio: true,
+        video: false
+    }, successCallback, errorCallback);
+}
+function onReceiveCall(call){
+
+  console.log('Você está sendo chamado ...');
+  $("#andamento").text("Você está sendo chamado por (em breve)...")
+  console.log(call);
+
+  getAudio(
+    function(MediaStream){
+        call.answer(MediaStream);
+        console.log('Respondendo chamada...');
+        $("#andamento").text("Respondendo chamada...")
+    },
+    function(err){
+        console.log('Um erro ocorreu ao recuperar seu aúdio');
+        $("#andamento").text("Erro inesperado, atualize a página.")
+        console.log(err);
+    }
+  );
+
+  call.on('stream', onReceiveStream);
+}
+function onReceiveStream(stream){
+  var audio = document.querySelector('audio');
+  audio.srcObject = stream;
+  audio.onloadedmetadata = function(e){
+      console.log('tocando o audio');
+      $("#andamento").text("Em chamada com " + $("#to").val());
+      $("#pos-nick").css("visibility", "hidden");
+      $("#end-call").css("visibility", "visible");
+      audio.play();
+  }
+}
+var peer = new Peer(
+  from,
+  {
+    host: 'voicejj.kinghost.net', port: 21211, path: '/peerjs',
+    config: {'iceServers': [
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com' }
+    ]}
+  }
+);
+
+
+$("#pos-nick").css("visibility", "visible")
+
+
+peer.on('open', function(id){
+      console.log('Meu ID do peer é: ' + id);
+      $("#texto").html("<font size='72px'>Você está conectado como " + id + "</font>")
+  });
+peer.on('call', onReceiveCall);
+
+$('#start-call').click(function(){
+  console.log('Começando chamada...');
+  $("#andamento").text('Chamando...')
+  var to = $('#to').val();
+  getAudio(
+    function(MediaStream){
+      $('#to').attr('type', 'hidden');
+      $('#start-call').attr('disabled', 'disabled');
+      console.log('Ligando para ' + to);
+      $("#andamento").text('Ligando para ' + to);
+      var call = peer.call(to, MediaStream);
+      call.on('stream', onReceiveStream);
+    },
+    function(err){
+      console.log('Um erro ocorreu ao pegar o seu aúdio');
+      $('#start-call').attr('enabled', 'enabled');
+      console.log(err);
+    }
+  );
+
+});
+</script>
